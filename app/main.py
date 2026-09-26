@@ -1,47 +1,43 @@
-import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
-import psycopg2
-import redis
 
-app = FastAPI(title="Base Docker Environment")
+from app.api.recipes import router as recipes_router
+from app.core.database import Base, engine
+import app.models.recipe
 
-@app.get("/")
-def read_root():
-    return {"status": "running", "environment": "docker"}
 
-@app.get("/health")
-def health_check():
-    db_status = "unknown"
-    cache_status = "unknown"
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+  """Асинхронний менеджер життєвого циклу додатку.
 
-    # Проверка подключения к PostgreSQL
-    try:
-        conn = psycopg2.connect(
-            host="db",
-            port=int(os.getenv("POSTGRES_PORT", 5432)),
-            dbname=os.getenv("POSTGRES_DB"),
-            user=os.getenv("POSTGRES_USER"),
-            password=os.getenv("POSTGRES_PASSWORD"),
-            connect_timeout=3
-        )
-        conn.close()
-        db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
+  Принцип роботи:
+  1. Код ДО оператора `yield` виконується ОДИН РАЗ при старті сервера Uvicorn:
+     - `create_all()` перевіряє наявність таблиць `recipes` та `ingredients` у PostgreSQL
+       і створює їх, якщо база щойно розгорнута.
+  2. Оператор `yield` передає керування додатку — сервер починає приймати HTTP-запити.
+  3. Код ПІСЛЯ `yield` спрацьовує при коректному вимкненні контейнера (Graceful Shutdown):
+     - `engine.dispose()` закриває всі відкриті TCP-з'єднання з базою даних,
+       запобігаючи витоку ресурсів.
+       """
+  Base.metadata.create_all(bind=engine)
+  yield
+  engine.dispose()
 
-    # Проверка подключения к Redis
-    try:
-        r = redis.Redis(
-            host="cache",
-            port=int(os.getenv("REDIS_PORT", 6379)),
-            socket_timeout=3
-        )
-        if r.ping():
-            cache_status = "connected"
-    except Exception as e:
-        cache_status = f"error: {str(e)}"
 
-    return {
-        "database": db_status,
-        "cache": cache_status
-    }
+app = FastAPI(
+    title="Recipe Management API",
+    version="1.0.0",
+    description="REST API для управління кулінарними рецептами та інгрідіентами",
+    lifespan=lifespan,
+)
+
+app.include_router(recipes_router)
+
+
+@app.get("/", tags=["System"])
+def root():
+  return {
+    "status": "running",
+    "docs_url": "/docs",
+    "message": "Recipe Management API is healthy and operational",
+  }

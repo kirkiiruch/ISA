@@ -1,26 +1,75 @@
+"""Модуль ініціалізації та конфігурації бази даних.
+
+Призначення файлу:
+Забезпечує підключення до реляційної СУБД PostgreSQL, налаштовує пул з'єднань,
+створює фабрику сесій для транзакцій та оголошує базовий декларативний клас (Base)
+для всіх ORM-моделей проєкту.
+"""
+
 import os
 from collections.abc import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm  import DeclarativeBase, Session, sessionmaker
 
+
+# -------------------------------------------------------------------------
+# Зчитування змінних середовища (конфігурація контейнера)
+# -------------------------------------------------------------------------
+# Якщо змінні не задані у файлі .env або середовищі Docker,
+# використовуються резервні значення за замовчуванням.
 DB_USER = os.getenv("POSTGRES_USER", "app_user")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "supersecretpassword")
 DB_NAME = os.getenv("POSTGRES_DB", "app_db")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 
-DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
+# У Docker-мережі хостом є назва сервісу бази даних (db або postgres_db)
+DB_HOST = os.getenv("POSTGRES_HOST", "postgres_db")
 
+
+# Формування DSN (Data Source Name) рядка для підключення через драйвер psycopg2
 DATABASE_URL = (
     f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
+# -------------------------------------------------------------------------
+# Створення рушія (Engine) та фабрики сесій
+# -------------------------------------------------------------------------
+# pool_pre_ping=True — перевіряє пінгом кожне з'єднання перед видачею з пулу.
+# Якщо PostgreSQL тимчасово перезавантажувався, це запобігає вильоту помилок 500.
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+# Фабрика сесій: створює ізольовані транзакційні контексти для кожного запиту.
+# autocommit=False — вимагає явного виклику .commit() для збереження даних.
+# autoflush=False — запобігає передчасній синхронізації з базою до фіксації.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
+# -------------------------------------------------------------------------
+# Базовий декларативний клас (Declarative Base)
+# -------------------------------------------------------------------------
 class Base(DeclarativeBase):
+    """Базовий клас для всіх моделей SQLAlchemy в системі.
+
+      Усі таблиці бази успадковують цей клас, завдяки чому SQLAlchemy
+      реєструє їх метадані і дозволяє виконати `Base.metadata.create_all()`
+      при старті програми.
+      """
     pass
 
-def get_bd() -> Generator[Session, None, None]:
+
+# -------------------------------------------------------------------------
+# Керування сесіями через Dependency Injection
+# -------------------------------------------------------------------------
+def get_db() -> Generator[Session, None, None]:
+    """Генератор сесій бази даних для контролерів FastAPI.
+
+      Принцип роботи:
+      1. Створює нову сесію `db` з фабрики SessionLocal для конкретного
+      HTTP-запиту.
+      2. Передає (yield) відкриту сесію в роутер або репозиторій.
+      3. Блок `finally` гарантує закриття з'єднання та повернення його в пул
+         навіть у випадку падіння програми з помилкою.
+      """
     db = SessionLocal()
     try:
         yield db
