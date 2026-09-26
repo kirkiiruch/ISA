@@ -32,3 +32,30 @@ db.commit()
 print("Тестовые данные успешно удалены.")
 
 db.close()
+
+from app.models.recipe import Ingredient, Recipe
+from app.schemas.recipe import RecipeCreate, RecipeResponse
+
+# 1. Проверяем валидацию входящих данных:
+try:
+  bad_data = RecipeCreate(
+      title="Чай",
+      description="Залить кипятком",
+      prep_time_minutes=-5,  # Ошибка: меньше нуля
+      ingredients=["чай"],
+  )
+except Exception as e:
+  print("Валидация успешно поймала отрицательное время!")
+
+# 2. Проверяем сериализацию ORM-модели в ответ API:
+fake_orm_recipe = Recipe(
+    id=42,
+    title="Омлет",
+    description="Обжарить на сковороде",
+    prep_time_minutes=10,
+    ingredients=[Ingredient(name="Яйцо"), Ingredient(name="Сыр")],
+)
+
+response_dto = RecipeResponse.model_validate(fake_orm_recipe)
+print("\nУспешная трансформация ORM в JSON-схему:")
+print(response_dto.model_dump())
