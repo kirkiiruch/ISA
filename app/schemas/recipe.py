@@ -49,21 +49,21 @@ class RecipeCreate(RecipeBase):
         examples=[["Яйце", "Молоко", "Мука"]]
     )
 
-@field_validator("ingredients")
-@classmethod
-def validate_ingredients(cls, v: list[str]) -> list[str]:
-    """Валідатор очищення списку інгредієнтів.
+    @field_validator("ingredients")
+    @classmethod
+    def validate_ingredients(cls, v: list[str]) -> list[str]:
+        """Валідатор очищення списку інгредієнтів.
 
-        Призначення:
-        - Обрізає випадкові пробіли на початку та в кінці кожного рядка.
-        - Видаляє порожні рядки зі списку.
-        - Викидає виняток ValueError (статус 422), якщо після очищення список
-        виявився порожнім.
-        """
-    cleaned = [name.strip() for name in v if name.strip()]
-    if not cleaned:
-        raise ValidationError("Ingredients cannot be empty")
-    return cleaned
+            Призначення:
+            - Обрізає випадкові пробіли на початку та в кінці кожного рядка.
+            - Видаляє порожні рядки зі списку.
+            - Викидає виняток ValueError (статус 422), якщо після очищення список
+            виявився порожнім.
+            """
+        cleaned = [name.strip() for name in v if name.strip()]
+        if not cleaned:
+            raise ValidationError("Ingredients cannot be empty")
+        return cleaned
 
 
 # -------------------------------------------------------------------------
