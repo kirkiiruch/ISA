@@ -20,7 +20,11 @@ from app.schemas.weather import (
 router = APIRouter()
 
 
-@router.get("/average", response_model=WeatherAverageResponse)
+@router.get(
+    "/average",
+    response_model=WeatherAverageResponse,
+    summary="Середня температура та сума опадів за період"
+)
 def get_average_weather(
     response: Response,
     start_date: date = Query(..., description="Початкова дата (YYYY-MM-DD)"),
@@ -49,7 +53,11 @@ def get_average_weather(
     return data
 
 
-@router.get("/extremes", response_model=WeatherExtremesResponse)
+@router.get(
+    "/extremes",
+    response_model=WeatherExtremesResponse,
+    summary="Дні з максимальною та мінімальною температурою"
+)
 def get_temperature_extremes(
     response: Response,
     city: Optional[str] = Query(None),
@@ -70,7 +78,11 @@ def get_temperature_extremes(
     return data
 
 
-@router.get("/monthly/{year}/{month}", response_model=WeatherMonthlyResponse)
+@router.get(
+    "/monthly/{year}/{month}",
+    response_model=WeatherMonthlyResponse,
+    summary="Погодна статистика за конкретний місяць"
+)
 def get_monthly_weather(
     response: Response,
     year: int,
@@ -104,7 +116,12 @@ def get_monthly_weather(
     return data
 
 
-@router.post("/import", response_model=WeatherImportResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/import",
+    response_model=WeatherImportResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Імпорт історичних метеоданих"
+)
 def trigger_import(
     city: Optional[str] = Query(None),
     latitude: Optional[float] = Query(None),
