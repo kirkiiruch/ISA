@@ -3,61 +3,76 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: api_service
+    container_name: kb_api
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8000}:8000"
     env_file:
       - .env
     depends_on:
-      db:
+      mongodb:
         condition: service_healthy
-      cache:
-        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     networks:
       - app_network
 
-  db:
-    image: postgres:16-alpine
-    container_name: postgres_db
+  mongodb:
+    image: mongodb/mongodb-atlas-local:8.0.0
+    container_name: kb_mongodb
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongodb_data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+    networks:
+      - app_network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: kb_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
       start_period: 5s
     networks:
       - app_network
 
-  cache:
-    image: redis:7-alpine
-    container_name: redis_cache
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 3s
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: kb_ollama_init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    command: >
+      -c "echo 'Pulling nomic-embed-text...' &&
+          ollama pull nomic-embed-text &&
+          echo 'Pulling llama3.2:3b...' &&
+          ollama pull llama3.2:3b &&
+          echo 'All models ready!'"
+    restart: "no"
     networks:
       - app_network
 
 volumes:
-  postgres_data:
-  redis_data:
+  mongodb_data:
+  ollama_models:
 
 networks:
   app_network:

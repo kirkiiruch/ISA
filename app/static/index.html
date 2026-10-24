@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Корпоративна база знань — RAG Сервіс</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container header-container">
+            <h1>📚 Корпоративна база знань</h1>
+            <p class="subtitle">Пошук та генерація відповідей за регламентами й документами компанії</p>
+        </div>
+    </header>
+
+    <main class="container main-content">
+        <!-- Блок документів -->
+        <section class="card documents-section">
+            <div class="card-header">
+                <h2>📄 Документи компанії</h2>
+                <span class="badge badge-info">PDF, TXT, MD до 10 МБ</span>
+            </div>
+
+            <form id="upload-form" class="upload-form">
+                <input type="file" id="file-input" accept=".pdf,.txt,.md" required>
+                <button type="submit" id="upload-btn" class="btn btn-primary">Завантажити файл</button>
+            </form>
+            <div id="upload-status" class="alert-box hidden"></div>
+
+            <div class="table-responsive">
+                <table class="documents-table">
+                    <thead>
+                        <tr>
+                            <th>Назва файлу</th>
+                            <th>Статус</th>
+                            <th>Чанки</th>
+                            <th>Дата створення</th>
+                            <th>Дія</th>
+                        </tr>
+                    </thead>
+                    <tbody id="documents-tbody">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">Завантаження списку документів...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Блок чату -->
+        <section class="card chat-section">
+            <div class="card-header">
+                <h2>💬 Запитати базу знань</h2>
+            </div>
+
+            <form id="ask-form" class="ask-form">
+                <div class="input-group">
+                    <textarea id="question-input" placeholder="Введіть ваше запитання до бази знань (наприклад: 'Які правила оформлення відпустки?')..." rows="3" required></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" id="ask-btn" class="btn btn-success">Запитати</button>
+                </div>
+            </form>
+
+            <div id="ask-error" class="alert-box alert-error hidden"></div>
+
+            <!-- Результати генерації -->
+            <div id="answer-container" class="answer-container hidden">
+                <div class="answer-header">
+                    <h3>💡 Відповідь:</h3>
+                    <span id="generating-indicator" class="generating-indicator hidden">Генерація відповіді...</span>
+                </div>
+                <div id="answer-text" class="answer-text"></div>
+
+                <div id="sources-container" class="sources-container hidden">
+                    <h4>🔍 Джерела:</h4>
+                    <div id="sources-list" class="sources-list"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
