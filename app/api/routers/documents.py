@@ -1,3 +1,5 @@
+"""Роутер для завантаження, отримання списку та видалення документів."""
+
 import os
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
@@ -25,7 +27,7 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
     "",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=DocumentUploadResponse,
-    summary="Upload document for background indexing",
+    summary="Завантаження документа для фонової індексації",
 )
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -33,13 +35,14 @@ async def upload_document(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
     settings: Settings = Depends(get_app_settings),
 ):
+    """Прийняти документ на індексацію у фоновому режимі."""
     filename = file.filename or "unknown"
     ext = os.path.splitext(filename)[1].lower()
 
     if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Unsupported media type: '{ext}'. Supported formats are: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
+            detail=f"Непідтримуваний формат '{ext}'. Дозволені формати: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
         )
 
     content = await file.read()
@@ -47,7 +50,7 @@ async def upload_document(
     if len(content) > max_bytes:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File exceeds maximum allowed size of {settings.MAX_FILE_SIZE_MB}MB",
+            detail=f"Розмір файлу перевищує ліміт {settings.MAX_FILE_SIZE_MB}MB",
         )
 
     try:
@@ -55,12 +58,11 @@ async def upload_document(
     except FileExistsError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Duplicate document: a document with identical content already exists.",
+            detail="Файл із таким вмістом уже було завантажено раніше (дублікат).",
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # Add background processing task
     background_tasks.add_task(
         ingestion_service.process_document_background,
         document_id=doc.id,
@@ -74,11 +76,12 @@ async def upload_document(
 @router.get(
     "",
     response_model=List[DocumentListItem],
-    summary="Get list of documents",
+    summary="Отримати список усіх документів",
 )
 async def list_documents(
     doc_repo: DocumentRepository = Depends(get_document_repository),
 ):
+    """Повернути список збережених документів."""
     docs = await doc_repo.list_all()
     return [
         DocumentListItem(
@@ -95,17 +98,18 @@ async def list_documents(
 @router.get(
     "/{document_id}",
     response_model=DocumentDetailResponse,
-    summary="Get document details by ID",
+    summary="Отримати детальну інформацію про документ",
 )
 async def get_document(
     document_id: str,
     doc_repo: DocumentRepository = Depends(get_document_repository),
 ):
+    """Повернути деталі документа за його ідентифікатором."""
     doc = await doc_repo.get_by_id(document_id)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with id '{document_id}' not found",
+            detail=f"Документ з ID '{document_id}' не знайдено",
         )
     return DocumentDetailResponse(
         id=doc.id,
@@ -122,21 +126,22 @@ async def get_document(
 @router.delete(
     "/{document_id}",
     response_model=MessageResponse,
-    summary="Delete document and all associated chunks",
+    summary="Видалити документ та пов'язані чанки",
 )
 async def delete_document(
     document_id: str,
     doc_repo: DocumentRepository = Depends(get_document_repository),
     chunk_repo: ChunkRepository = Depends(get_chunk_repository),
 ):
+    """Видалити документ разом із усіма його збереженими векторами."""
     doc = await doc_repo.get_by_id(document_id)
     if not doc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with id '{document_id}' not found",
+            detail=f"Документ з ID '{document_id}' не знайдено",
         )
 
     await chunk_repo.delete_by_document_id(document_id)
     await doc_repo.delete(document_id)
 
-    return MessageResponse(message=f"Document '{document_id}' and all associated chunks deleted successfully.")
+    return MessageResponse(message=f"Document '{document_id}' deleted successfully.")

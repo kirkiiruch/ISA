@@ -1,3 +1,5 @@
+"""Моделі бази даних для документів та текстових чанків."""
+
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
@@ -6,16 +8,19 @@ import uuid
 
 
 class DocumentStatus(str, Enum):
+    """Статуси життєвого циклу документа."""
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
 
 
 def get_utc_now() -> datetime:
+    """Поточний час у форматі UTC."""
     return datetime.now(timezone.utc)
 
 
 class DocumentModel(BaseModel):
+    """Модель збереженого документа компанії."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     filename: str
     content_hash: str
@@ -28,6 +33,7 @@ class DocumentModel(BaseModel):
 
 
 class ChunkModel(BaseModel):
+    """Модель текстового фрагмента (чанка) з вектором ембедингу."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     document_id: str
     filename: str

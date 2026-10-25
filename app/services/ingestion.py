@@ -1,3 +1,5 @@
+"""Сервіс валідації, парсингу, чанкінгу та індексації документів."""
+
 import hashlib
 import io
 import logging
@@ -16,13 +18,12 @@ SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
 
 
 def calculate_sha256(content: bytes) -> str:
+    """Обчислення SHA-256 хешу файлу."""
     return hashlib.sha256(content).hexdigest()
 
 
 def split_text_into_chunks(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
-    """
-    Splits text into chunks of given size with overlap.
-    """
+    """Розбиття тексту на фрагменти заданого розміру з перекриттям."""
     cleaned_text = text.strip()
     if not cleaned_text:
         return []
@@ -46,10 +47,7 @@ def split_text_into_chunks(text: str, chunk_size: int, chunk_overlap: int) -> Li
 
 
 def extract_text_and_pages(filename: str, content: bytes) -> List[Tuple[Optional[int], str]]:
-    """
-    Extracts text and page numbers from document content.
-    Returns list of (page_number, text).
-    """
+    """Вилучення тексту та номерів сторінок з файлу."""
     ext = os.path.splitext(filename)[1].lower()
 
     if ext == ".pdf":
@@ -69,10 +67,12 @@ def extract_text_and_pages(filename: str, content: bytes) -> List[Tuple[Optional
         return [(1, text)] if text.strip() else []
 
     else:
-        raise ValueError(f"Unsupported file format: {ext}")
+        raise ValueError(f"Непідтримуваний формат файлу: {ext}")
 
 
 class IngestionService:
+    """Сервіс для збереження та фонової індексації файлів."""
+
     def __init__(
         self,
         document_repo: DocumentRepository,
@@ -86,20 +86,22 @@ class IngestionService:
         self.settings = settings
 
     def validate_file(self, filename: str, content_size: int):
+        """Перевірка розширення та максимального розміру файлу."""
         ext = os.path.splitext(filename)[1].lower()
         if ext not in SUPPORTED_EXTENSIONS:
-            raise ValueError(f"Unsupported file extension: {ext}")
+            raise ValueError(f"Непідтримуваний формат: {ext}")
         max_bytes = self.settings.MAX_FILE_SIZE_MB * 1024 * 1024
         if content_size > max_bytes:
-            raise ValueError(f"File size exceeds maximum allowed limit of {self.settings.MAX_FILE_SIZE_MB}MB")
+            raise ValueError(f"Розмір файлу перевищує ліміт {self.settings.MAX_FILE_SIZE_MB}MB")
 
     async def create_document(self, filename: str, content: bytes) -> DocumentModel:
+        """Попередня реєстрація документа та перевірка на дублікат."""
         self.validate_file(filename, len(content))
         content_hash = calculate_sha256(content)
 
         existing = await self.doc_repo.get_by_hash(content_hash)
         if existing:
-            raise FileExistsError(f"Duplicate document with hash {content_hash} already exists")
+            raise FileExistsError(f"Файл із хешем {content_hash} уже існує")
 
         doc = DocumentModel(
             filename=filename,
@@ -110,10 +112,7 @@ class IngestionService:
         return await self.doc_repo.create(doc)
 
     async def process_document_background(self, document_id: str, filename: str, content: bytes):
-        """
-        Background task: parsing -> chunking -> embedding -> storing.
-        Updates document status to READY or FAILED.
-        """
+        """Фонова задача: розбиття на чанки, отримання ембедингів і запис."""
         try:
             pages = extract_text_and_pages(filename, content)
             chunks: List[ChunkModel] = []
@@ -150,10 +149,10 @@ class IngestionService:
                 status=DocumentStatus.READY,
                 chunks_count=len(chunks),
             )
-            logger.info("Successfully processed document %s with %d chunks", document_id, len(chunks))
+            logger.info("Документ %s успішно індексовано (%d чанків)", document_id, len(chunks))
 
         except Exception as e:
-            logger.error("Failed to process document %s: %s", document_id, e, exc_info=True)
+            logger.error("Помилка індексації документа %s: %s", document_id, e)
             await self.doc_repo.update_status(
                 doc_id=document_id,
                 status=DocumentStatus.FAILED,

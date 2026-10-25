@@ -1,3 +1,5 @@
+"""RAG-сервіс для формування контексту та генерації відповідей."""
+
 import json
 import logging
 from typing import AsyncGenerator, List, Optional, Dict, Any
@@ -18,6 +20,7 @@ SYSTEM_PROMPT = (
 
 
 def build_context_prompt(chunks: List[Dict[str, Any]], question: str) -> str:
+    """Побудова підсумкового текстового промпту з контекстом знайдених документів."""
     context_parts = []
     for chunk in chunks:
         fn = chunk.get("filename", "unknown")
@@ -31,6 +34,8 @@ def build_context_prompt(chunks: List[Dict[str, Any]], question: str) -> str:
 
 
 class RAGService:
+    """Сервіс відповіді на питання на базі внутрішніх документів."""
+
     def __init__(self, retrieval_service: RetrievalService, llm_client: LLMClient):
         self.retrieval_service = retrieval_service
         self.llm_client = llm_client
@@ -41,6 +46,7 @@ class RAGService:
         document_ids: Optional[List[str]] = None,
         top_k: Optional[int] = None,
     ) -> AskResponse:
+        """Звичайна генерація відповіді без стримінгу."""
         chunks, sources = await self.retrieval_service.retrieve(
             question=question,
             document_ids=document_ids,
@@ -60,6 +66,7 @@ class RAGService:
         document_ids: Optional[List[str]] = None,
         top_k: Optional[int] = None,
     ) -> AsyncGenerator[str, None]:
+        """Потокова віддача відповіді через події SSE."""
         try:
             chunks, sources = await self.retrieval_service.retrieve(
                 question=question,
@@ -67,7 +74,7 @@ class RAGService:
                 top_k=top_k,
             )
 
-            # Send sources first
+            # Спочатку відправляємо список знайдених джерел
             sources_json = json.dumps([s.model_dump() for s in sources], ensure_ascii=False)
             yield f"event: sources\ndata: {sources_json}\n\n"
 
@@ -86,6 +93,6 @@ class RAGService:
             yield "event: done\ndata: {}\n\n"
 
         except Exception as e:
-            logger.error("Error in ask_stream: %s", e, exc_info=True)
+            logger.error("Помилка під час ask_stream: %s", e)
             err_json = json.dumps({"error": str(e)}, ensure_ascii=False)
             yield f"event: error\ndata: {err_json}\n\n"

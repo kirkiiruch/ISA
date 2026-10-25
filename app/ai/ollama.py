@@ -1,3 +1,5 @@
+"""Клієнти Ollama для текстової генерації та побудови ембедингів."""
+
 import json
 import logging
 from typing import AsyncGenerator, List, Optional
@@ -8,12 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaLLMClient(LLMClient):
+    """Клієнт взаємодії з моделлю Ollama (llama3.2:3b)."""
+
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3.2:3b", timeout: float = 180.0):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
 
     async def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Синхронна генерація повної відповіді."""
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -29,12 +34,13 @@ class OllamaLLMClient(LLMClient):
                 data = response.json()
                 return data.get("response", "")
             except Exception as e:
-                logger.error("Error generating text from Ollama: %s", e)
+                logger.error("Помилка генерації через Ollama: %s", e)
                 raise RuntimeError(f"Ollama generation failed: {e}") from e
 
     async def generate_stream(
         self, prompt: str, system_prompt: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
+        """Потокова віддача токенів відповіді."""
         payload = {
             "model": self.model,
             "prompt": prompt,
@@ -60,28 +66,32 @@ class OllamaLLMClient(LLMClient):
                         except json.JSONDecodeError:
                             continue
             except Exception as e:
-                logger.error("Error streaming from Ollama: %s", e)
+                logger.error("Помилка стримінгу через Ollama: %s", e)
                 raise RuntimeError(f"Ollama streaming failed: {e}") from e
 
 
 class OllamaEmbeddingClient(EmbeddingClient):
+    """Клієнт отримання векторів через Ollama (nomic-embed-text)."""
+
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "nomic-embed-text", timeout: float = 180.0):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
 
     async def get_embedding(self, text: str) -> List[float]:
+        """Отримати ембединг для одного речення."""
         embeddings = await self.get_embeddings([text])
         if not embeddings:
-            raise RuntimeError("No embedding returned from Ollama")
+            raise RuntimeError("Не вдалося отримати вектор від Ollama")
         return embeddings[0]
 
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Отримати вектори для списку фрагментів."""
         if not texts:
             return []
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            # First try the modern /api/embed endpoint supporting batching
+            # Спочатку пробуємо пакетний ендпоінт /api/embed
             try:
                 payload = {
                     "model": self.model,
@@ -96,7 +106,7 @@ class OllamaEmbeddingClient(EmbeddingClient):
             except Exception:
                 pass
 
-            # Fallback to /api/embeddings for each text
+            # Резервний варіант по одному через /api/embeddings
             results: List[List[float]] = []
             for text in texts:
                 try:
@@ -109,7 +119,7 @@ class OllamaEmbeddingClient(EmbeddingClient):
                     data = res.json()
                     results.append(data.get("embedding", []))
                 except Exception as e:
-                    logger.error("Error getting embedding from Ollama: %s", e)
+                    logger.error("Помилка отримання ембедингу: %s", e)
                     raise RuntimeError(f"Ollama embedding failed: {e}") from e
 
             return results

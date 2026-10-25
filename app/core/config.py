@@ -1,8 +1,12 @@
+"""Конфігурація застосунку та налаштування оточення."""
+
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Налаштування сервісу, бази даних MongoDB та моделей Ollama."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -32,4 +36,5 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
+    """Отримати кешований екземпляр налаштувань."""
     return Settings()

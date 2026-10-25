@@ -1,28 +1,34 @@
+"""Базові інтерфейси для AI-моделей генерації та ембедингів."""
+
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, List, Optional
 
 
 class LLMClient(ABC):
+    """Абстрактний інтерфейс для великої мовної моделі."""
+
     @abstractmethod
     async def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """Generates a complete response for the given prompt."""
+        """Згенерувати повну відповідь на промпт."""
         pass
 
     @abstractmethod
     async def generate_stream(
         self, prompt: str, system_prompt: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
-        """Streams response tokens for the given prompt."""
+        """Потокова генерація відповіді токен за токеном."""
         pass
 
 
 class EmbeddingClient(ABC):
+    """Абстрактний інтерфейс для побудови векторних ембедингів."""
+
     @abstractmethod
     async def get_embedding(self, text: str) -> List[float]:
-        """Returns embedding vector for a single string."""
+        """Отримати вектор для одного тексту."""
         pass
 
     @abstractmethod
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Returns embedding vectors for a batch of strings."""
+        """Отримати вектори для списку текстів."""
         pass

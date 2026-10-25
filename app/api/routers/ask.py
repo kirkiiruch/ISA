@@ -1,3 +1,5 @@
+"""Роутер для обробки запитань до бази знань."""
+
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -11,12 +13,13 @@ router = APIRouter(prefix="/api/ask", tags=["ask"])
 @router.post(
     "",
     response_model=AskResponse,
-    summary="Ask a question without streaming",
+    summary="Задати запитання без стримінгу",
 )
 async def ask_question(
     request: AskRequest,
     rag_service: RAGService = Depends(get_rag_service),
 ):
+    """Отримати повну відповідь та список знайдених джерел."""
     return await rag_service.ask(
         question=request.question,
         document_ids=request.document_ids,
@@ -26,15 +29,16 @@ async def ask_question(
 
 @router.get(
     "/stream",
-    summary="Ask a question with Server-Sent Events (SSE) streaming",
+    summary="Задати запитання у режимі SSE-стримінгу",
 )
 async def ask_question_stream(
     request: Request,
-    question: str = Query(..., min_length=3, max_length=1000, description="User question"),
-    document_ids: Optional[List[str]] = Query(None, description="Optional document ID filters"),
-    top_k: Optional[int] = Query(None, ge=1, le=10, description="Top-K chunks to retrieve"),
+    question: str = Query(..., min_length=3, max_length=1000, description="Запитання користувача"),
+    document_ids: Optional[List[str]] = Query(None, description="Фільтр за списком ID документів"),
+    top_k: Optional[int] = Query(None, ge=1, le=10, description="Кількість чанків для пошуку"),
     rag_service: RAGService = Depends(get_rag_service),
 ):
+    """Потокова передача відповіді через text/event-stream."""
     async def sse_generator():
         async for chunk in rag_service.ask_stream(
             question=question,

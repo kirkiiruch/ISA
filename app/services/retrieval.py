@@ -1,3 +1,5 @@
+"""Сервіс семантичного пошуку релевантних фрагментів документів."""
+
 import logging
 from typing import List, Optional, Tuple, Dict, Any
 from app.ai.base import EmbeddingClient
@@ -9,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class RetrievalService:
+    """Сервіс пошуку та відбору чанків за порогом релевантності."""
+
     def __init__(
         self,
         chunk_repo: ChunkRepository,
@@ -25,15 +29,11 @@ class RetrievalService:
         document_ids: Optional[List[str]] = None,
         top_k: Optional[int] = None,
     ) -> Tuple[List[Dict[str, Any]], List[SourceItem]]:
-        """
-        Retrieves relevant chunks and converts them to SourceItem models.
-        Filters out any chunks whose score is below SCORE_THRESHOLD.
-        Returns (relevant_raw_chunks, sources).
-        """
+        """Знайти найбільш релевантні чанки з фільтрацією за SCORE_THRESHOLD."""
         effective_top_k = top_k if top_k is not None else self.settings.TOP_K
         threshold = self.settings.SCORE_THRESHOLD
 
-        logger.info("Generating embedding for question: '%s'", question[:50])
+        logger.info("Створення ембедингу для запитання: '%s'", question[:50])
         query_embedding = await self.embedding_client.get_embedding(question)
 
         raw_results = await self.chunk_repo.vector_search(
@@ -64,7 +64,7 @@ class RetrievalService:
                 )
             else:
                 logger.info(
-                    "Chunk from %s skipped due to low score: %.4f < %.4f",
+                    "Чанк з %s пропущено: score %.4f < %.4f",
                     doc.get("filename"),
                     score,
                     threshold,

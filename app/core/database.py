@@ -1,3 +1,5 @@
+"""Підключення до MongoDB та ініціалізація індексів."""
+
 import logging
 from typing import Optional
 from pymongo import AsyncMongoClient, ASCENDING
@@ -10,6 +12,7 @@ _mongo_client: Optional[AsyncMongoClient] = None
 
 
 def get_mongo_client(settings: Optional[Settings] = None) -> AsyncMongoClient:
+    """Отримати або створити клієнт підключення до MongoDB."""
     global _mongo_client
     if _mongo_client is None:
         cfg = settings or get_settings()
@@ -18,6 +21,7 @@ def get_mongo_client(settings: Optional[Settings] = None) -> AsyncMongoClient:
 
 
 async def close_mongo_client():
+    """Закрити з'єднання з базою даних."""
     global _mongo_client
     if _mongo_client is not None:
         await _mongo_client.close()
@@ -25,29 +29,29 @@ async def close_mongo_client():
 
 
 def get_db(settings: Optional[Settings] = None) -> AsyncDatabase:
+    """Отримати об'єкт бази даних."""
     cfg = settings or get_settings()
     client = get_mongo_client(cfg)
     return client[cfg.MONGODB_DB_NAME]
 
 
 async def init_indexes(db: AsyncDatabase):
-    """
-    Creates necessary regular and vector search indexes on collections.
-    """
+    """Створення звичайних та векторних індексів у колекціях."""
     try:
-        # Documents collection indexes
+        # Індекси для документів
         docs_col = db["documents"]
         await docs_col.create_index([("id", ASCENDING)], unique=True)
         await docs_col.create_index([("content_hash", ASCENDING)], unique=True)
         await docs_col.create_index([("created_at", ASCENDING)])
-        logger.info("Created indexes on 'documents' collection")
+        logger.info("Створено індекси для колекції documents")
 
-        # Chunks collection indexes
+        # Індекси для чанків
         chunks_col = db["chunks"]
         await chunks_col.create_index([("id", ASCENDING)], unique=True)
         await chunks_col.create_index([("document_id", ASCENDING)])
-        logger.info("Created indexes on 'chunks' collection")
+        logger.info("Створено індекси для колекції chunks")
 
+        # Векторний індекс для пошуку
         try:
             vector_index_spec = {
                 "name": "vector_index",
@@ -80,8 +84,8 @@ async def init_indexes(db: AsyncDatabase):
                 if "vector_index" not in existing:
                     await chunks_col.create_search_index(model=vector_index_spec)
         except Exception as e:
-            logger.info("Search index note: %s", e)
+            logger.info("Vector search індекс: %s", e)
 
     except Exception as e:
-        logger.error("Error during database index initialization: %s", e)
+        logger.error("Помилка ініціалізації індексів: %s", e)
         raise
