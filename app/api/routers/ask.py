@@ -53,8 +53,8 @@ async def ask_question_stream(
         sse_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Connection": "close",
             "X-Accel-Buffering": "no",
         },
     )

@@ -23,6 +23,9 @@ class OllamaLLMClient(LLMClient):
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "options": {
+                "temperature": 0.0,
+            },
         }
         if system_prompt:
             payload["system"] = system_prompt
@@ -45,11 +48,15 @@ class OllamaLLMClient(LLMClient):
             "model": self.model,
             "prompt": prompt,
             "stream": True,
+            "options": {
+                "temperature": 0.0,
+            },
         }
         if system_prompt:
             payload["system"] = system_prompt
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        timeout_config = httpx.Timeout(self.timeout, connect=60.0)
+        async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
                 async with client.stream("POST", f"{self.base_url}/api/generate", json=payload) as response:
                     response.raise_for_status()
@@ -66,8 +73,9 @@ class OllamaLLMClient(LLMClient):
                         except json.JSONDecodeError:
                             continue
             except Exception as e:
-                logger.error("Помилка стримінгу через Ollama: %s", e)
-                raise RuntimeError(f"Ollama streaming failed: {e}") from e
+                err_text = str(e) or repr(e)
+                logger.error("Помилка стримінгу через Ollama: %s", err_text)
+                raise RuntimeError(f"Ollama streaming failed: {err_text}") from e
 
 
 class OllamaEmbeddingClient(EmbeddingClient):

@@ -87,7 +87,8 @@ class ChunkRepository:
         ]
 
         try:
-            cursor = self.collection.aggregate(pipeline)
+            res = self.collection.aggregate(pipeline)
+            cursor = await res if hasattr(res, "__await__") else res
             results = []
             async for doc in cursor:
                 results.append(doc)

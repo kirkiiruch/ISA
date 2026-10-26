@@ -3,84 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Корпоративна база знань — RAG Сервіс</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>Корпоративна база знань</title>
+    <link rel="stylesheet" href="/static/style.css?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <header class="header">
-        <div class="container header-container">
-            <h1>📚 Корпоративна база знань</h1>
-            <p class="subtitle">Пошук та генерація відповідей за регламентами й документами компанії</p>
+    <div class="chat-app">
+        <!-- Верхня панель -->
+        <header class="top-nav">
+            <div class="nav-brand">
+                <span class="nav-logo">✨</span>
+                <span class="nav-title">Корпоративна база знань</span>
+            </div>
+            <div class="nav-actions">
+                <button type="button" id="top-docs-btn" class="btn-ghost">
+                    📄 Завантажені файли <span class="badge-count" id="top-docs-count">0</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Головна область діалогу -->
+        <main class="chat-viewport">
+            <div id="chat-messages" class="chat-messages">
+                <!-- Стартове вітальне повідомлення -->
+                <div class="welcome-screen" id="welcome-screen">
+                    <div class="welcome-icon">💬</div>
+                    <h2>Чим я можу вам допомогти?</h2>
+                    <p>Задавайте питання за регламентами, інструкціями та внутрішніми документами компанії.</p>
+                    <div class="quick-prompts">
+                        <button class="quick-prompt-btn" data-query="Які правила та терміни оформлення відпустки?">
+                            📅 "Які правила оформлення відпустки?"
+                        </button>
+                        <button class="quick-prompt-btn" data-query="Який встановлений робочий графік компанії?">
+                            ⏰ "Який робочий графік компанії?"
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Нижня панель введення (як у ChatGPT / Gemini) -->
+        <footer class="chat-input-area">
+            <form id="upload-form" style="display: none !important;">
+                <input type="file" id="file-input" accept=".pdf,.txt,.md" style="display: none !important;">
+            </form>
+            <div class="input-card">
+                <form id="ask-form" class="ask-form">
+                    <textarea 
+                        id="question-input" 
+                        placeholder="Напишіть запитання до бази знань... (Enter для надсилання)" 
+                        rows="1" 
+                        required
+                    ></textarea>
+
+                    <div class="input-bottom-bar">
+                        <!-- Кнопки керування файлами ліворуч -->
+                        <div class="input-tools-left">
+                            <button type="button" id="add-file-btn" class="tool-btn" title="Додати файл (.pdf, .txt, .md)">
+                                <span class="tool-icon">📎</span> Додати файл
+                            </button>
+                            <button type="button" id="view-files-btn" class="tool-btn" title="Переглянути завантажені документи">
+                                <span class="tool-icon">📁</span> Завантажені файли (<span id="input-docs-count">0</span>)
+                            </button>
+                        </div>
+
+                        <!-- Кнопка надсилання праворуч -->
+                        <div class="input-tools-right">
+                            <button type="submit" id="ask-btn" class="send-btn" title="Надіслати запитання">
+                                <span class="send-icon">↑</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="footer-note">Відповіді генеруються суворо на основі наданих документів компанії.</div>
+        </footer>
+    </div>
+
+    <!-- Модальне вікно списку документів -->
+    <div id="docs-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>📄 Завантажені документи компанії</h3>
+                <button type="button" id="close-modal-btn" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-upload-zone" class="modal-upload-zone">
+                    <p>Перетягніть або виберіть файл для додавання (.pdf, .txt, .md до 10 МБ)</p>
+                    <button type="button" id="modal-select-file-btn" class="btn btn-secondary">Обрати файл</button>
+                </div>
+                <div id="upload-status" class="alert-box hidden"></div>
+
+                <div class="table-container">
+                    <table class="docs-table">
+                        <thead>
+                            <tr>
+                                <th>Назва файлу</th>
+                                <th>Статус</th>
+                                <th>Чанки</th>
+                                <th>Дата</th>
+                                <th>Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody id="documents-tbody">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Завантаження...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-    </header>
+    </div>
 
-    <main class="container main-content">
-        <!-- Блок документів -->
-        <section class="card documents-section">
-            <div class="card-header">
-                <h2>📄 Документи компанії</h2>
-                <span class="badge badge-info">PDF, TXT, MD до 10 МБ</span>
-            </div>
+    <!-- Спливаючі сповіщення (Toast) -->
+    <div id="toast-container" class="toast-container"></div>
 
-            <form id="upload-form" class="upload-form">
-                <input type="file" id="file-input" accept=".pdf,.txt,.md" required>
-                <button type="submit" id="upload-btn" class="btn btn-primary">Завантажити файл</button>
-            </form>
-            <div id="upload-status" class="alert-box hidden"></div>
-
-            <div class="table-responsive">
-                <table class="documents-table">
-                    <thead>
-                        <tr>
-                            <th>Назва файлу</th>
-                            <th>Статус</th>
-                            <th>Чанки</th>
-                            <th>Дата створення</th>
-                            <th>Дія</th>
-                        </tr>
-                    </thead>
-                    <tbody id="documents-tbody">
-                        <tr>
-                            <td colspan="5" class="text-center text-muted">Завантаження списку документів...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Блок чату -->
-        <section class="card chat-section">
-            <div class="card-header">
-                <h2>💬 Запитати базу знань</h2>
-            </div>
-
-            <form id="ask-form" class="ask-form">
-                <div class="input-group">
-                    <textarea id="question-input" placeholder="Введіть ваше запитання до бази знань (наприклад: 'Які правила оформлення відпустки?')..." rows="3" required></textarea>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" id="ask-btn" class="btn btn-success">Запитати</button>
-                </div>
-            </form>
-
-            <div id="ask-error" class="alert-box alert-error hidden"></div>
-
-            <!-- Результати генерації -->
-            <div id="answer-container" class="answer-container hidden">
-                <div class="answer-header">
-                    <h3>💡 Відповідь:</h3>
-                    <span id="generating-indicator" class="generating-indicator hidden">Генерація відповіді...</span>
-                </div>
-                <div id="answer-text" class="answer-text"></div>
-
-                <div id="sources-container" class="sources-container hidden">
-                    <h4>🔍 Джерела:</h4>
-                    <div id="sources-list" class="sources-list"></div>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=4"></script>
 </body>
 </html>

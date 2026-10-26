@@ -1,35 +1,255 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const uploadForm = document.getElementById('upload-form');
-    const fileInput = document.getElementById('file-input');
-    const uploadBtn = document.getElementById('upload-btn');
-    const uploadStatus = document.getElementById('upload-status');
-    const documentsTbody = document.getElementById('documents-tbody');
-
+    // Елементи інтерфейсу чату
     const askForm = document.getElementById('ask-form');
     const questionInput = document.getElementById('question-input');
     const askBtn = document.getElementById('ask-btn');
-    const askError = document.getElementById('ask-error');
-    const answerContainer = document.getElementById('answer-container');
-    const generatingIndicator = document.getElementById('generating-indicator');
-    const answerText = document.getElementById('answer-text');
-    const sourcesContainer = document.getElementById('sources-container');
-    const sourcesList = document.getElementById('sources-list');
+    const chatMessages = document.getElementById('chat-messages');
+    const welcomeScreen = document.getElementById('welcome-screen');
+
+    // Кнопки та форми файлів
+    const uploadForm = document.getElementById('upload-form');
+    const fileInput = document.getElementById('file-input');
+    const addFileBtn = document.getElementById('add-file-btn');
+    const viewFilesBtn = document.getElementById('view-files-btn');
+    const topDocsBtn = document.getElementById('top-docs-btn');
+    const inputDocsCount = document.getElementById('input-docs-count');
+    const topDocsCount = document.getElementById('top-docs-count');
+
+    // Модальне вікно документів
+    const docsModal = document.getElementById('docs-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const modalSelectFileBtn = document.getElementById('modal-select-file-btn');
+    const documentsTbody = document.getElementById('documents-tbody');
+    const toastContainer = document.getElementById('toast-container');
 
     let pollingTimer = null;
     let eventSource = null;
 
-    // Load initial documents
+    // Початкове завантаження списку документів
     loadDocuments();
 
-    // 1. Upload Document
-    uploadForm.addEventListener('submit', async (e) => {
+    // 1. Автоматичний ресайз textarea та обробка Enter
+    questionInput.addEventListener('input', () => {
+        questionInput.style.height = 'auto';
+        questionInput.style.height = Math.min(questionInput.scrollHeight, 140) + 'px';
+    });
+
+    questionInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (questionInput.value.trim().length > 0 && !askBtn.disabled) {
+                askForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            }
+        }
+    });
+
+    // 2. Обробка кліку по швидких підказках
+    document.querySelectorAll('.quick-prompt-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const query = btn.getAttribute('data-query');
+            if (query) {
+                questionInput.value = query;
+                questionInput.dispatchEvent(new Event('input'));
+                askForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            }
+        });
+    });
+
+    // 3. Відправка запитання та отримання відповіді через SSE
+    askForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        const question = questionInput.value.trim();
+        if (!question) {
+            return;
+        }
+
+        // Прибираємо вітальний екран
+        if (welcomeScreen) {
+            welcomeScreen.style.display = 'none';
+        }
+
+        // Додаємо повідомлення користувача в чат
+        appendUserMessage(question);
+
+        // Очищаємо поле введення
+        questionInput.value = '';
+        questionInput.style.height = 'auto';
+        askBtn.disabled = true;
+
+        // Створюємо блок відповіді моделі з індикатором "Обробка"
+        const { messageElement, contentElement } = appendAIMessage();
+        let currentSources = [];
+        let hasReceivedFirstToken = false;
+        let isFinished = false;
+
+        // Підтримка передачі параметра top_k=N з тексту запиту для тестування валідації (422)
+        let topKParam = 5;
+        let cleanQuestion = question;
+        const topKMatch = question.match(/(?:^|\s)top_k=(-?\d+)(?:\s|$)/i);
+        if (topKMatch) {
+            topKParam = parseInt(topKMatch[1], 10);
+            const stripped = question.replace(topKMatch[0], ' ').trim();
+            if (stripped.length >= 3) {
+                cleanQuestion = stripped;
+            }
+        }
+
+        const url = `/api/ask/stream?question=${encodeURIComponent(cleanQuestion)}&top_k=${topKParam}&_t=${Date.now()}`;
+        if (eventSource) {
+            eventSource.close();
+        }
+        eventSource = new EventSource(url);
+
+        eventSource.addEventListener('sources', (ev) => {
+            try {
+                currentSources = JSON.parse(ev.data) || [];
+            } catch (err) {
+                console.error('Помилка парсингу джерел:', err);
+            }
+        });
+
+        eventSource.addEventListener('token', (ev) => {
+            try {
+                const data = JSON.parse(ev.data);
+                if (data.text) {
+                    if (!hasReceivedFirstToken) {
+                        contentElement.innerHTML = '';
+                        hasReceivedFirstToken = true;
+                    }
+                    contentElement.textContent += data.text;
+                    scrollToBottom();
+                }
+            } catch (err) {
+                console.error('Помилка обробки токена:', err);
+            }
+        });
+
+        eventSource.addEventListener('done', () => {
+            isFinished = true;
+            cleanUpSSE();
+            // Якщо є джерела — додаємо кнопку зі спливаючим віконцем
+            if (currentSources && currentSources.length > 0) {
+                renderSourcesButton(messageElement, currentSources);
+            }
+        });
+
+        eventSource.addEventListener('error', async (ev) => {
+            if (isFinished) return;
+            cleanUpSSE();
+            isFinished = true;
+
+            let errMsg = 'Не вдалося згенерувати відповідь.';
+            try {
+                if (ev.data) {
+                    const data = JSON.parse(ev.data);
+                    if (data.error) errMsg = data.error;
+                } else if (!hasReceivedFirstToken) {
+                    const checkRes = await fetch(url);
+                    if (checkRes.status === 422) {
+                        errMsg = '422 Unprocessable Entity — Некоректні параметри запиту (питання: 3–1000 символів, top_k: 1–10).';
+                    }
+                }
+            } catch (err) {}
+
+            if (!hasReceivedFirstToken) {
+                contentElement.innerHTML = `<span style="color: var(--danger)">Помилка: ${escapeHtml(errMsg)}</span>`;
+            }
+            showToast(errMsg, 'toast-error');
+        });
+    });
+
+    function cleanUpSSE() {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+        askBtn.disabled = false;
+        questionInput.focus();
+    }
+
+    function appendUserMessage(text) {
+        const row = document.createElement('div');
+        row.className = 'message-row user-row';
+        row.innerHTML = `
+            <div class="message-bubble">
+                <div class="message-content">${escapeHtml(text)}</div>
+            </div>
+            <div class="avatar user-avatar">👤</div>
+        `;
+        chatMessages.appendChild(row);
+        scrollToBottom();
+    }
+
+    function appendAIMessage() {
+        const row = document.createElement('div');
+        row.className = 'message-row ai-row';
+        row.innerHTML = `
+            <div class="avatar ai-avatar">✨</div>
+            <div class="message-bubble">
+                <div class="message-content">
+                    <div class="processing-indicator">
+                        <span class="processing-pulse"></span>
+                        <span>Обробка</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        chatMessages.appendChild(row);
+        scrollToBottom();
+        return {
+            messageElement: row.querySelector('.message-bubble'),
+            contentElement: row.querySelector('.message-content'),
+        };
+    }
+
+    function renderSourcesButton(bubbleElement, sources) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'sources-wrapper';
+
+        const sourcesListHtml = sources.map(s => {
+            const pageStr = s.page ? ` (стор. ${s.page})` : '';
+            const scoreStr = s.score ? `${(s.score * 100).toFixed(0)}%` : '';
+            return `
+                <div class="source-item">
+                    <div class="source-file">
+                        <span>📄 ${escapeHtml(s.filename)}${pageStr}</span>
+                        <span class="source-score">${scoreStr}</span>
+                    </div>
+                    <div class="source-snippet">${escapeHtml(s.snippet)}</div>
+                </div>
+            `;
+        }).join('');
+
+        wrapper.innerHTML = `
+            <button type="button" class="sources-btn">
+                <span>🔍</span> Джерела (${sources.length})
+            </button>
+            <div class="sources-popover">
+                <div class="popover-title">Використані джерела:</div>
+                ${sourcesListHtml}
+            </div>
+        `;
+
+        bubbleElement.appendChild(wrapper);
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        const viewport = document.querySelector('.chat-viewport');
+        if (viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
+        }
+    }
+
+    // 4. Завантаження файлів через кнопки
+    addFileBtn.addEventListener('click', () => fileInput.click());
+    modalSelectFileBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async () => {
         const file = fileInput.files[0];
         if (!file) return;
 
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = 'Завантаження...';
-        showUploadStatus('', 'hidden');
+        showToast(`Завантаження: ${file.name}...`, 'toast-info');
 
         const formData = new FormData();
         formData.append('file', file);
@@ -41,36 +261,55 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (response.status === 202) {
-                showUploadStatus('Файл прийнято на обробку!', 'alert-success');
+                showToast(`Файл "${file.name}" прийнято в обробку!`, 'toast-success');
                 fileInput.value = '';
                 await loadDocuments();
             } else if (response.status === 409) {
-                showUploadStatus('Помилка: файл із таким вмістом уже завантажено (дублікат).', 'alert-error');
+                showToast('Помилка: файл із таким вмістом уже завантажено (дублікат).', 'toast-error');
             } else if (response.status === 415) {
-                showUploadStatus('Помилка: непідтримуваний формат файлу. Дозволено лише .pdf, .txt, .md.', 'alert-error');
+                showToast('Помилка: непідтримуваний формат. Дозволено лише .pdf, .txt, .md', 'toast-error');
             } else if (response.status === 413) {
-                showUploadStatus('Помилка: розмір файлу перевищує 10 МБ.', 'alert-error');
+                showToast('Помилка: розмір файлу перевищує 10 МБ.', 'toast-error');
             } else {
                 const data = await response.json().catch(() => ({}));
-                showUploadStatus(`Помилка: ${data.detail || 'Не вдалося завантажити файл.'}`, 'alert-error');
+                showToast(`Помилка: ${data.detail || 'Не вдалося завантажити файл.'}`, 'toast-error');
             }
         } catch (err) {
-            showUploadStatus(`Мережева помилка: ${err.message}`, 'alert-error');
-        } finally {
-            uploadBtn.disabled = false;
-            uploadBtn.textContent = 'Завантажити файл';
+            showToast(`Мережева помилка: ${err.message}`, 'toast-error');
         }
     });
 
-    // 2. Load Documents
+    // 5. Модальне вікно списку документів
+    function openModal() {
+        docsModal.classList.remove('hidden');
+        loadDocuments();
+    }
+
+    function closeModal() {
+        docsModal.classList.add('hidden');
+    }
+
+    viewFilesBtn.addEventListener('click', openModal);
+    topDocsBtn.addEventListener('click', openModal);
+    closeModalBtn.addEventListener('click', closeModal);
+
+    docsModal.addEventListener('click', (e) => {
+        if (e.target === docsModal) closeModal();
+    });
+
+    // 6. Отримання та відображення списку документів
     async function loadDocuments() {
         try {
             const response = await fetch('/api/documents');
-            if (!response.ok) throw new Error('Не вдалося завантажити документи');
+            if (!response.ok) return;
             const docs = await response.json();
             renderDocumentsTable(docs);
 
-            // Check if any document is processing, then poll
+            const countStr = `${docs.length}`;
+            if (inputDocsCount) inputDocsCount.textContent = countStr;
+            if (topDocsCount) topDocsCount.textContent = countStr;
+
+            // Автополлінг якщо є документи в processing
             const hasProcessing = docs.some(d => d.status === 'processing');
             if (hasProcessing) {
                 if (!pollingTimer) {
@@ -83,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } catch (err) {
-            console.error(err);
+            console.error('Не вдалося завантажити документи:', err);
         }
     }
 
@@ -98,14 +337,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         documentsTbody.innerHTML = docs.map(doc => {
-            const date = new Date(doc.created_at).toLocaleString('uk-UA');
+            const date = new Date(doc.created_at).toLocaleDateString('uk-UA');
             let statusBadge = '';
             if (doc.status === 'ready') {
-                statusBadge = '<span class="badge badge-ready">ready</span>';
+                statusBadge = '<span class="badge-status badge-ready">ready</span>';
             } else if (doc.status === 'processing') {
-                statusBadge = '<span class="badge badge-processing">processing...</span>';
+                statusBadge = '<span class="badge-status badge-processing">processing...</span>';
             } else {
-                statusBadge = '<span class="badge badge-failed">failed</span>';
+                statusBadge = '<span class="badge-status badge-failed">failed</span>';
             }
 
             return `
@@ -115,146 +354,43 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${doc.chunks_count}</td>
                     <td>${date}</td>
                     <td>
-                        <button class="btn btn-danger" onclick="deleteDocument('${doc.id}')">Видалити</button>
+                        <button class="btn-del" onclick="deleteDocItem('${doc.id}')">Видалити</button>
                     </td>
                 </tr>
             `;
         }).join('');
     }
 
-    // 3. Delete Document
-    window.deleteDocument = async function(id) {
-        if (!confirm('Ви впевнені, що хочете видалити цей документ?')) return;
+    // 7. Видалення документа
+    window.deleteDocItem = async function(id) {
+        if (!confirm('Видалити цей документ та всі його чанки?')) return;
 
         try {
             const response = await fetch(`/api/documents/${id}`, {
                 method: 'DELETE',
             });
             if (response.ok) {
+                showToast('Документ успішно видалено', 'toast-info');
                 await loadDocuments();
             } else {
                 const data = await response.json().catch(() => ({}));
-                alert(`Помилка видалення: ${data.detail || 'Невідома помилка'}`);
+                showToast(`Помилка: ${data.detail || 'Не вдалося видалити'}`, 'toast-error');
             }
         } catch (err) {
-            alert(`Мережева помилка: ${err.message}`);
+            showToast(`Мережева помилка: ${err.message}`, 'toast-error');
         }
     };
 
-    // 4. Ask Question with SSE
-    askForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const question = questionInput.value.trim();
-        if (question.length < 3) {
-            showAskError('Запитання має містити щонайменше 3 символи.');
-            return;
-        }
+    function showToast(message, type = 'toast-info') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        toastContainer.appendChild(toast);
 
-        hideAskError();
-        if (eventSource) {
-            eventSource.close();
-        }
-
-        askBtn.disabled = true;
-        askBtn.textContent = 'Генерація...';
-        answerContainer.classList.remove('hidden');
-        generatingIndicator.classList.remove('hidden');
-        answerText.textContent = '';
-        sourcesContainer.classList.add('hidden');
-        sourcesList.innerHTML = '';
-
-        const url = `/api/ask/stream?question=${encodeURIComponent(question)}`;
-        eventSource = new EventSource(url);
-
-        eventSource.addEventListener('sources', (e) => {
-            try {
-                const sources = JSON.parse(e.data);
-                renderSources(sources);
-            } catch (err) {
-                console.error('Error parsing sources:', err);
-            }
-        });
-
-        eventSource.addEventListener('token', (e) => {
-            try {
-                const data = JSON.parse(e.data);
-                if (data.text) {
-                    answerText.textContent += data.text;
-                }
-            } catch (err) {
-                console.error('Error parsing token:', err);
-            }
-        });
-
-        eventSource.addEventListener('done', () => {
-            cleanUpSSE();
-        });
-
-        eventSource.addEventListener('error', (e) => {
-            try {
-                if (e.data) {
-                    const data = JSON.parse(e.data);
-                    showAskError(`Помилка генерації: ${data.error || 'Невідома помилка'}`);
-                } else {
-                    showAskError('Втрачено з\'єднання із сервером генерації.');
-                }
-            } catch (err) {
-                showAskError('Помилка під час отримання відповіді.');
-            }
-            cleanUpSSE();
-        });
-
-        eventSource.onerror = () => {
-            cleanUpSSE();
-        };
-    });
-
-    function cleanUpSSE() {
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-        }
-        generatingIndicator.classList.add('hidden');
-        askBtn.disabled = false;
-        askBtn.textContent = 'Запитати';
-    }
-
-    function renderSources(sources) {
-        if (!sources || sources.length === 0) {
-            sourcesContainer.classList.add('hidden');
-            return;
-        }
-
-        sourcesContainer.classList.remove('hidden');
-        sourcesList.innerHTML = sources.map(s => {
-            const pageStr = s.page ? ` (стор. ${s.page})` : '';
-            return `
-                <div class="source-card">
-                    <div class="source-header">
-                        <span>📄 ${escapeHtml(s.filename)}${pageStr}</span>
-                        <span class="source-score">score: ${s.score}</span>
-                    </div>
-                    <div class="source-snippet">${escapeHtml(s.snippet)}</div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    function showUploadStatus(msg, type) {
-        uploadStatus.className = `alert-box ${type}`;
-        uploadStatus.textContent = msg;
-        if (type === 'hidden') {
-            uploadStatus.classList.add('hidden');
-        }
-    }
-
-    function showAskError(msg) {
-        askError.textContent = msg;
-        askError.classList.remove('hidden');
-    }
-
-    function hideAskError() {
-        askError.classList.add('hidden');
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 200);
+        }, 3500);
     }
 
     function escapeHtml(text) {
