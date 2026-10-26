@@ -25,6 +25,7 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 5s
@@ -83,6 +84,7 @@ services:
 
 volumes:
   mongodb_data:
+  mongodb_config:
   ollama_models:
 
 networks:
