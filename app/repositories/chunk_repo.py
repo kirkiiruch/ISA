@@ -92,10 +92,11 @@ class ChunkRepository:
             results = []
             async for doc in cursor:
                 results.append(doc)
-            return results
+            if results:
+                return results
         except Exception as e:
             logger.info("Atlas Search недоступний (%s), застосовується косинусний fallback", e)
-            return await self._fallback_vector_search(query_embedding, document_ids, top_k)
+        return await self._fallback_vector_search(query_embedding, document_ids, top_k)
 
     async def _fallback_vector_search(
         self,
