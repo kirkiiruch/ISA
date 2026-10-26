@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let isFinished = false;
 
         // Підтримка передачі параметра top_k=N з тексту запиту для тестування валідації (422)
-        let topKParam = 5;
+        let topKParam = 3;
         let cleanQuestion = question;
         const topKMatch = question.match(/(?:^|\s)top_k=(-?\d+)(?:\s|$)/i);
         if (topKMatch) {
