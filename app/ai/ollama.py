@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class OllamaLLMClient(LLMClient):
     """Клієнт взаємодії з моделлю Ollama (llama3.2:3b)."""
 
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3.2:3b", timeout: float = 180.0):
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3.2:3b", timeout: float = 500.0):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
@@ -83,7 +83,7 @@ class OllamaLLMClient(LLMClient):
 class OllamaEmbeddingClient(EmbeddingClient):
     """Клієнт отримання векторів через Ollama (nomic-embed-text)."""
 
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "nomic-embed-text", timeout: float = 180.0):
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "nomic-embed-text", timeout: float = 500.0):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
