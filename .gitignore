@@ -5,3 +5,5 @@ __pycache__
 venv
 .idea
 .vscode
+aether_robotics_handbook.txt
+test_*.txt

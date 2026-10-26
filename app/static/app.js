@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let isFinished = false;
 
         // Підтримка передачі параметра top_k=N з тексту запиту для тестування валідації (422)
-        let topKParam = 3;
+        let topKParam = 5;
         let cleanQuestion = question;
         const topKMatch = question.match(/(?:^|\s)top_k=(-?\d+)(?:\s|$)/i);
         if (topKMatch) {
@@ -127,6 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
         eventSource.addEventListener('done', () => {
             isFinished = true;
             cleanUpSSE();
+            const fullAnswer = (contentElement.textContent || '').trim();
+            if (fullAnswer.includes('У документах не знайдено інформації')) {
+                contentElement.textContent = 'У документах не знайдено інформації за цим запитом';
+                return;
+            }
             // Якщо є джерела — додаємо кнопку зі спливаючим віконцем
             if (currentSources && currentSources.length > 0) {
                 renderSourcesButton(messageElement, currentSources);

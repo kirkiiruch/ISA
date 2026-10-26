@@ -25,6 +25,7 @@ class OllamaLLMClient(LLMClient):
             "stream": False,
             "options": {
                 "temperature": 0.0,
+                "num_ctx": 4096,
             },
         }
         if system_prompt:
@@ -50,6 +51,7 @@ class OllamaLLMClient(LLMClient):
             "stream": True,
             "options": {
                 "temperature": 0.0,
+                "num_ctx": 4096,
             },
         }
         if system_prompt:
@@ -87,23 +89,33 @@ class OllamaEmbeddingClient(EmbeddingClient):
         self.timeout = timeout
 
     async def get_embedding(self, text: str) -> List[float]:
-        """Отримати ембединг для одного речення."""
-        embeddings = await self.get_embeddings([text])
+        """Отримати ембединг для одного речення (запиту користувача)."""
+        prefixed_query = (
+            text if text.startswith(("search_query: ", "search_document: "))
+            else f"search_query: {text}"
+        )
+        embeddings = await self.get_embeddings([prefixed_query])
         if not embeddings:
             raise RuntimeError("Не вдалося отримати вектор від Ollama")
         return embeddings[0]
 
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Отримати вектори для списку фрагментів."""
+        """Отримати вектори для списку фрагментів документів."""
         if not texts:
             return []
+
+        prefixed_texts = [
+            t if t.startswith(("search_query: ", "search_document: "))
+            else f"search_document: {t}"
+            for t in texts
+        ]
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             # Спочатку пробуємо пакетний ендпоінт /api/embed
             try:
                 payload = {
                     "model": self.model,
-                    "input": texts,
+                    "input": prefixed_texts,
                 }
                 response = await client.post(f"{self.base_url}/api/embed", json=payload)
                 if response.status_code == 200:
@@ -116,7 +128,7 @@ class OllamaEmbeddingClient(EmbeddingClient):
 
             # Резервний варіант по одному через /api/embeddings
             results: List[List[float]] = []
-            for text in texts:
+            for text in prefixed_texts:
                 try:
                     payload = {
                         "model": self.model,

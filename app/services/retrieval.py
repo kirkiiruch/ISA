@@ -36,19 +36,11 @@ class RetrievalService:
         logger.info("Створення ембедингу для запитання: '%s'", question[:50])
         query_embedding = await self.embedding_client.get_embedding(question)
 
-        if isinstance(self.chunk_repo, ChunkRepository):
-            raw_results = await self.chunk_repo.vector_search(
-                query_embedding=query_embedding,
-                document_ids=document_ids,
-                top_k=effective_top_k,
-                query_text=question,
-            )
-        else:
-            raw_results = await self.chunk_repo.vector_search(
-                query_embedding=query_embedding,
-                document_ids=document_ids,
-                top_k=effective_top_k,
-            )
+        raw_results = await self.chunk_repo.vector_search(
+            query_embedding=query_embedding,
+            document_ids=document_ids,
+            top_k=effective_top_k,
+        )
 
         relevant_chunks: List[Dict[str, Any]] = []
         sources: List[SourceItem] = []

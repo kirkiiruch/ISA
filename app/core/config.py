@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "nomic-embed-text"
 
     # RAG Settings
-    CHUNK_SIZE: int = 500
-    CHUNK_OVERLAP: int = 50
-    TOP_K: int = 3
-    SCORE_THRESHOLD: float = 0.5
+    CHUNK_SIZE: int = 700
+    CHUNK_OVERLAP: int = 150
+    TOP_K: int = 5
+    SCORE_THRESHOLD: float = 0.853
     MAX_FILE_SIZE_MB: int = 10
 
     # Application Settings
