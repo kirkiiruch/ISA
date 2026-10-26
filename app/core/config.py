@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 700
     CHUNK_OVERLAP: int = 150
     TOP_K: int = 5
-    SCORE_THRESHOLD: float = 0.853
+    SCORE_THRESHOLD: float = 0.8
     MAX_FILE_SIZE_MB: int = 10
 
     # Application Settings

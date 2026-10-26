@@ -36,18 +36,26 @@ def split_text_into_chunks(text: str, chunk_size: int, chunk_overlap: int) -> Li
     while start < len(cleaned_text):
         end = start + chunk_size
         if end < len(cleaned_text):
-            space_pos = cleaned_text.rfind(" ", start, end)
-            if space_pos > start:
-                end = space_pos
+            search_from = start + int(chunk_size * 0.65)
+            nl_pos = cleaned_text.rfind("\n", search_from, end)
+            if nl_pos > start:
+                end = nl_pos
+            else:
+                space_pos = cleaned_text.rfind(" ", start, end)
+                if space_pos > start:
+                    end = space_pos
 
         chunk = cleaned_text[start:end].strip()
         if chunk:
             chunks.append(chunk)
         if end >= len(cleaned_text):
             break
-        start = end - chunk_overlap
-        if start < 0:
-            start = 0
+        next_start = max(0, end - chunk_overlap)
+        if next_start > start:
+            space_pos = cleaned_text.find(" ", next_start, end)
+            if space_pos != -1 and space_pos + 1 < end:
+                next_start = space_pos + 1
+        start = next_start
 
     return chunks
 

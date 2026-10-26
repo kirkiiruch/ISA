@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
             isFinished = true;
             cleanUpSSE();
             const fullAnswer = (contentElement.textContent || '').trim();
-            if (fullAnswer.includes('У документах не знайдено інформації')) {
+            if (fullAnswer.includes('У документах не знайдено інформації') && fullAnswer.length < 90) {
                 contentElement.textContent = 'У документах не знайдено інформації за цим запитом';
                 return;
             }
